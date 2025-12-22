@@ -146,3 +146,35 @@ class ProfanityDetector:
         """Remove words from the profanity list."""
         for word in words:
             self.profanity_set.discard(word.lower().strip())
+
+    def check_text(self, text: str) -> list[str]:
+        """
+        Check if any profanity words exist in raw text (e.g., lyrics).
+
+        This is a quick check before running expensive audio processing.
+
+        Args:
+            text: Raw text to scan (e.g., song lyrics)
+
+        Returns:
+            List of profanity words found in the text
+        """
+        found = []
+        # Normalize the entire text
+        words_in_text = re.findall(r"\w+", text.lower())
+
+        for word in words_in_text:
+            # Check exact match
+            if word in self.profanity_set:
+                if word not in found:
+                    found.append(word)
+                continue
+
+            # Check if any profanity is contained within this word
+            for profanity in self.profanity_set:
+                if profanity in word and len(profanity) >= 4:
+                    if profanity not in found:
+                        found.append(profanity)
+                    break
+
+        return found

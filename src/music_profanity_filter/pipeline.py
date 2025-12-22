@@ -99,25 +99,50 @@ class MusicProfanityFilter:
         else:
             output_path = Path(output_path)
 
+        # Determine step count based on whether lyrics are provided
+        total_steps = 6 if lyrics else 5
+        step = 0
+
+        # Early check: if we have lyrics, scan them for profanity first
+        # This avoids expensive Demucs processing if there's nothing to filter
+        if lyrics:
+            step += 1
+            print(f"\n[{step}/{total_steps}] Checking lyrics for profanity...")
+            profanity_in_lyrics = self.detector.check_text(lyrics)
+            if not profanity_in_lyrics:
+                print("\nNo profanity found in lyrics - nothing to do.")
+                return FilterResult(
+                    input_path=input_path,
+                    output_path=None,
+                    profanities_found=[],
+                    transcribed_words=[],
+                    success=True,
+                )
+            print(f"Found potential profanity in lyrics: {', '.join(profanity_in_lyrics)}")
+            print("Proceeding with audio processing...")
+
         # Create temp directory for intermediate files
         temp_dir = Path(tempfile.mkdtemp(prefix="music_filter_"))
 
         try:
-            # Step 1: Separate stems
-            print(f"\n[1/6] Separating stems from {input_path.name}...")
+            # Separate stems
+            step += 1
+            print(f"\n[{step}/{total_steps}] Separating stems from {input_path.name}...")
             stems = self.separator.separate(input_path, output_dir=temp_dir)
             vocals_path = stems["vocals"]
             instrumentals_path = stems["instrumentals"]
 
-            # Step 2: Transcribe vocals
-            print(f"\n[2/6] Transcribing vocals...")
+            # Transcribe vocals
+            step += 1
+            print(f"\n[{step}/{total_steps}] Transcribing vocals...")
             if lyrics:
                 words = self.transcriber.transcribe_with_context(vocals_path, lyrics)
             else:
                 words = self.transcriber.transcribe(vocals_path)
 
-            # Step 3: Detect profanity
-            print(f"\n[3/6] Detecting profanity...")
+            # Detect profanity
+            step += 1
+            print(f"\n[{step}/{total_steps}] Detecting profanity...")
             profanities = self.detector.detect(words)
 
             # Preview callback if provided
@@ -142,13 +167,15 @@ class MusicProfanityFilter:
                     success=True,
                 )
 
-            # Step 4: Edit vocals (mute profanity)
-            print(f"\n[4/6] Muting {len(profanities)} profanities in vocals...")
+            # Edit vocals (mute profanity)
+            step += 1
+            print(f"\n[{step}/{total_steps}] Muting {len(profanities)} profanities in vocals...")
             edited_vocals_path = temp_dir / "edited_vocals.wav"
             self.editor.mute_profanities(vocals_path, profanities, edited_vocals_path)
 
-            # Step 5: Recombine and export
-            print(f"\n[5/6] Combining stems and exporting...")
+            # Recombine and export
+            step += 1
+            print(f"\n[{step}/{total_steps}] Combining stems and exporting...")
             output_format = output_path.suffix.lstrip(".") or "mp3"
             self.editor.combine_stems(
                 edited_vocals_path,
@@ -157,8 +184,8 @@ class MusicProfanityFilter:
                 output_format=output_format,
             )
 
-            # Step 6: Copy metadata and embed synced lyrics
-            print(f"\n[6/6] Copying metadata...")
+            # Copy metadata and embed synced lyrics
+            print(f"\nCopying metadata...")
             copy_tags(input_path, output_path)
             if words and output_path.suffix.lower() == ".mp3":
                 embed_synced_lyrics(output_path, words)
