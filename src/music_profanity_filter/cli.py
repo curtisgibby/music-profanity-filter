@@ -78,6 +78,16 @@ def print_profanities(profanities) -> None:
     help="Only detect profanities, don't create cleaned files.",
 )
 @click.option(
+    "--generate-edl", "-e",
+    is_flag=True,
+    help="Generate EDL file for manual timestamp review. Saves stems for re-use.",
+)
+@click.option(
+    "--apply-edl",
+    type=click.Path(exists=True, path_type=Path),
+    help="Apply edits from an EDL file (skips detection, re-uses cached stems).",
+)
+@click.option(
     "--lyrics",
     type=click.Path(exists=True, path_type=Path),
     help="Path to lyrics file for improved alignment accuracy.",
@@ -102,6 +112,8 @@ def main(
     demucs_model: str,
     keep_temp: bool,
     detect_only: bool,
+    generate_edl: bool,
+    apply_edl: Path | None,
     lyrics: Path | None,
     fetch_lyrics: bool,
     genius_token: str | None,
@@ -121,6 +133,14 @@ def main(
         music-clean song.mp3 --overwrite
 
         music-clean album/*.mp3 -o ./clean/
+
+    EDL Workflow (for manual timestamp correction):
+
+        music-clean song.mp3 --fetch-lyrics --generate-edl
+
+        # Edit the .edl.json file to correct timestamps
+
+        music-clean song.mp3 --apply-edl song.edl.json
     """
     if not input_files:
         click.echo("No input files specified. Use --help for usage information.")
@@ -182,6 +202,45 @@ def main(
                 click.echo("\nNo profanity detected!")
             continue
 
+        if apply_edl:
+            # Apply edits from EDL file
+            result = filter_instance.apply_edl(
+                input_path=input_path,
+                edl_path=apply_edl,
+                output_path=output_path,
+                overwrite=overwrite,
+            )
+            results.append(result)
+
+            if not result.success:
+                click.secho(f"Error: {result.error}", fg="red")
+            elif result.profanities_found:
+                click.secho(
+                    f"Applied {len(result.profanities_found)} edits -> {result.output_path}",
+                    fg="green",
+                )
+            else:
+                click.secho("No edits in EDL file.", fg="yellow")
+            continue
+
+        if generate_edl:
+            # Generate EDL file for manual review
+            result = filter_instance.generate_edl(
+                input_path=input_path,
+                lyrics=lyrics_text,
+            )
+            results.append(result)
+
+            if not result.success:
+                click.secho(f"Error: {result.error}", fg="red")
+            elif result.profanities_found:
+                print_profanities(result.profanities_found)
+                click.secho(f"EDL saved to: {result.edl_path}", fg="green")
+                click.secho(f"Stems saved to: {result.stems_dir}", fg="green")
+            else:
+                click.secho("No profanity found, no EDL generated.", fg="yellow")
+            continue
+
         # Define preview callback
         def preview_callback(profanities):
             print_profanities(profanities)
@@ -217,7 +276,10 @@ def main(
         successful = sum(1 for r in results if r.success)
         total_profanities = sum(len(r.profanities_found) for r in results)
         click.echo(f"Files processed: {successful}/{len(results)}")
-        click.echo(f"Total profanities cleaned: {total_profanities}")
+        if generate_edl:
+            click.echo(f"Total profanities detected: {total_profanities}")
+        else:
+            click.echo(f"Total profanities cleaned: {total_profanities}")
 
 
 if __name__ == "__main__":
