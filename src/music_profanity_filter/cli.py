@@ -2,12 +2,17 @@
 Command-line interface for the music profanity filter.
 """
 
+import os
 import sys
 from pathlib import Path
 
 import click
+from dotenv import load_dotenv
 
 from .pipeline import MusicProfanityFilter
+
+# Load .env file if present
+load_dotenv()
 
 
 def format_time(seconds: float) -> str:
@@ -77,6 +82,16 @@ def print_profanities(profanities) -> None:
     type=click.Path(exists=True, path_type=Path),
     help="Path to lyrics file for improved alignment accuracy.",
 )
+@click.option(
+    "--fetch-lyrics", "-f",
+    is_flag=True,
+    help="Automatically fetch lyrics from Genius (requires GENIUS_ACCESS_TOKEN).",
+)
+@click.option(
+    "--genius-token",
+    envvar="GENIUS_ACCESS_TOKEN",
+    help="Genius API access token (or set GENIUS_ACCESS_TOKEN env var).",
+)
 def main(
     input_files: tuple[Path],
     output_dir: Path | None,
@@ -88,6 +103,8 @@ def main(
     keep_temp: bool,
     detect_only: bool,
     lyrics: Path | None,
+    fetch_lyrics: bool,
+    genius_token: str | None,
 ):
     """
     Clean profanity from music tracks.
@@ -118,10 +135,21 @@ def main(
         keep_temp_files=keep_temp,
     )
 
-    # Load lyrics if provided
-    lyrics_text = None
+    # Initialize lyrics fetcher if needed
+    lyrics_fetcher = None
+    if fetch_lyrics:
+        try:
+            from .lyrics import LyricsFetcher
+            lyrics_fetcher = LyricsFetcher(access_token=genius_token)
+            click.echo("Genius lyrics fetching enabled")
+        except (ImportError, ValueError) as e:
+            click.secho(f"Warning: {e}", fg="yellow")
+            click.echo("Continuing without automatic lyrics fetching...")
+
+    # Load lyrics from file if provided (applies to all files)
+    shared_lyrics_text = None
     if lyrics:
-        lyrics_text = lyrics.read_text(encoding="utf-8")
+        shared_lyrics_text = lyrics.read_text(encoding="utf-8")
         click.echo(f"Loaded lyrics from {lyrics}")
 
     # Process each file
@@ -130,6 +158,14 @@ def main(
         click.echo(f"\n{'=' * 60}")
         click.echo(f"Processing: {input_path}")
         click.echo("=" * 60)
+
+        # Determine lyrics for this file
+        lyrics_text = shared_lyrics_text
+        if not lyrics_text and lyrics_fetcher:
+            # Try to fetch lyrics from Genius
+            fetched = lyrics_fetcher.fetch_from_file(input_path)
+            if fetched:
+                lyrics_text = fetched
 
         # Determine output path
         if output_dir:
