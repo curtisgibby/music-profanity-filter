@@ -1,0 +1,188 @@
+"""
+Command-line interface for the music profanity filter.
+"""
+
+import sys
+from pathlib import Path
+
+import click
+
+from .pipeline import MusicProfanityFilter
+
+
+def format_time(seconds: float) -> str:
+    """Format seconds as MM:SS.ms"""
+    minutes = int(seconds // 60)
+    secs = seconds % 60
+    return f"{minutes:02d}:{secs:05.2f}"
+
+
+def print_profanities(profanities) -> None:
+    """Pretty print detected profanities."""
+    click.echo("\nDetected profanities:")
+    click.echo("-" * 50)
+    for i, p in enumerate(profanities, 1):
+        time_str = f"{format_time(p.start)} - {format_time(p.end)}"
+        click.echo(f"  {i:3}. [{time_str}] {p.original_word!r}")
+    click.echo("-" * 50)
+    click.echo(f"Total: {len(profanities)} profanities found\n")
+
+
+@click.command()
+@click.argument("input_files", nargs=-1, type=click.Path(exists=True, path_type=Path))
+@click.option(
+    "--output-dir", "-o",
+    type=click.Path(file_okay=False, path_type=Path),
+    help="Output directory for cleaned files. Defaults to same directory as input.",
+)
+@click.option(
+    "--overwrite", "-w",
+    is_flag=True,
+    help="Overwrite original files instead of creating '(clean)' copies.",
+)
+@click.option(
+    "--preview", "-p",
+    is_flag=True,
+    help="Preview detected profanities before processing and confirm.",
+)
+@click.option(
+    "--profanity-list", "-l",
+    type=click.Path(exists=True, path_type=Path),
+    help="Path to custom profanity word list (one word per line).",
+)
+@click.option(
+    "--whisper-model", "-m",
+    type=click.Choice(["tiny", "base", "small", "medium", "large"]),
+    default="base",
+    help="Whisper model size. Larger = more accurate but slower.",
+)
+@click.option(
+    "--demucs-model",
+    type=click.Choice(["htdemucs", "htdemucs_ft", "mdx_extra"]),
+    default="htdemucs",
+    help="Demucs model for stem separation.",
+)
+@click.option(
+    "--keep-temp",
+    is_flag=True,
+    help="Keep temporary files (stems, edited vocals) for debugging.",
+)
+@click.option(
+    "--detect-only", "-d",
+    is_flag=True,
+    help="Only detect profanities, don't create cleaned files.",
+)
+@click.option(
+    "--lyrics",
+    type=click.Path(exists=True, path_type=Path),
+    help="Path to lyrics file for improved alignment accuracy.",
+)
+def main(
+    input_files: tuple[Path],
+    output_dir: Path | None,
+    overwrite: bool,
+    preview: bool,
+    profanity_list: Path | None,
+    whisper_model: str,
+    demucs_model: str,
+    keep_temp: bool,
+    detect_only: bool,
+    lyrics: Path | None,
+):
+    """
+    Clean profanity from music tracks.
+
+    Automatically detects and mutes profane words in songs, leaving the
+    instrumental playing through for a natural sound.
+
+    Examples:
+
+        music-clean song.mp3
+
+        music-clean *.mp3 --preview
+
+        music-clean song.mp3 --overwrite
+
+        music-clean album/*.mp3 -o ./clean/
+    """
+    if not input_files:
+        click.echo("No input files specified. Use --help for usage information.")
+        sys.exit(1)
+
+    # Initialize the filter
+    click.echo("Initializing music profanity filter...")
+    filter_instance = MusicProfanityFilter(
+        demucs_model=demucs_model,
+        whisper_model=whisper_model,
+        profanity_list_path=profanity_list,
+        keep_temp_files=keep_temp,
+    )
+
+    # Load lyrics if provided
+    lyrics_text = None
+    if lyrics:
+        lyrics_text = lyrics.read_text(encoding="utf-8")
+        click.echo(f"Loaded lyrics from {lyrics}")
+
+    # Process each file
+    results = []
+    for input_path in input_files:
+        click.echo(f"\n{'=' * 60}")
+        click.echo(f"Processing: {input_path}")
+        click.echo("=" * 60)
+
+        # Determine output path
+        if output_dir:
+            output_path = output_dir / f"{input_path.stem} (clean){input_path.suffix}"
+        else:
+            output_path = None  # Let pipeline determine
+
+        if detect_only:
+            # Just detect and report
+            profanities = filter_instance.detect_only(input_path)
+            if profanities:
+                print_profanities(profanities)
+            else:
+                click.echo("\nNo profanity detected!")
+            continue
+
+        # Define preview callback
+        def preview_callback(profanities):
+            print_profanities(profanities)
+            if preview:
+                return click.confirm("Proceed with cleaning?", default=True)
+            return True
+
+        # Run the filter
+        result = filter_instance.filter(
+            input_path=input_path,
+            output_path=output_path,
+            overwrite=overwrite,
+            preview_callback=preview_callback,
+            lyrics=lyrics_text,
+        )
+        results.append(result)
+
+        if not result.success:
+            click.secho(f"Error: {result.error}", fg="red")
+        elif result.profanities_found:
+            click.secho(
+                f"Cleaned {len(result.profanities_found)} profanities -> {result.output_path}",
+                fg="green",
+            )
+        else:
+            click.secho("No profanity found, file unchanged.", fg="yellow")
+
+    # Summary
+    if len(input_files) > 1 and not detect_only:
+        click.echo(f"\n{'=' * 60}")
+        click.echo("Summary")
+        click.echo("=" * 60)
+        successful = sum(1 for r in results if r.success)
+        total_profanities = sum(len(r.profanities_found) for r in results)
+        click.echo(f"Files processed: {successful}/{len(results)}")
+        click.echo(f"Total profanities cleaned: {total_profanities}")
+
+
+if __name__ == "__main__":
+    main()

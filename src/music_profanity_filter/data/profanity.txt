@@ -1,0 +1,87 @@
+# Default profanity word list for music-profanity-filter
+# One word per line, lines starting with # are comments
+# Add your own words or use a custom list with --profanity-list
+
+# F-word variations
+fuck
+fucking
+fucked
+fucker
+fuckers
+fuckin
+fucks
+motherfucker
+motherfucking
+motherfuckers
+
+# S-word variations
+shit
+shitty
+shits
+shitting
+bullshit
+horseshit
+dipshit
+
+# A-word variations
+ass
+asses
+asshole
+assholes
+badass
+dumbass
+jackass
+
+# B-word variations
+bitch
+bitches
+bitching
+bitchy
+sonofabitch
+
+# D-word variations
+damn
+damned
+damnit
+goddamn
+goddamnit
+
+# Slurs and severe profanity
+cunt
+cunts
+nigga
+niggas
+nigger
+niggers
+faggot
+faggots
+fag
+fags
+retard
+retarded
+retards
+
+# Sexual terms
+cock
+cocks
+dick
+dicks
+dickhead
+pussy
+pussies
+whore
+whores
+slut
+sluts
+skank
+skanks
+
+# Other common profanity
+bastard
+bastards
+hell
+crap
+crappy
+piss
+pissed
+pissing
