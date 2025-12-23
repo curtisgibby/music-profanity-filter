@@ -7,7 +7,7 @@ Copies ID3 tags from source to destination and embeds synchronized lyrics.
 import shutil
 from pathlib import Path
 
-from mutagen.id3 import ID3, SYLT, Encoding, ID3NoHeaderError
+from mutagen.id3 import ID3, SYLT, TIT2, Encoding, ID3NoHeaderError
 from mutagen.mp3 import MP3
 
 
@@ -42,6 +42,12 @@ def copy_tags(source_path: Path, dest_path: Path) -> None:
     # Copy all frames from source to dest
     for frame_id in source_tags.keys():
         dest_tags[frame_id] = source_tags[frame_id]
+
+    # Update title to include "(clean)" suffix
+    if "TIT2" in dest_tags:
+        original_title = str(dest_tags["TIT2"])
+        if not original_title.endswith("(clean)"):
+            dest_tags["TIT2"] = TIT2(encoding=Encoding.UTF8, text=f"{original_title} (clean)")
 
     dest_tags.save(str(dest_path))
     print(f"Copied ID3 tags from original file")
