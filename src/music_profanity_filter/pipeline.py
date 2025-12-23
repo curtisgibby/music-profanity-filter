@@ -12,7 +12,7 @@ from pathlib import Path
 from .detector import ProfanityDetector, ProfanityMatch
 from .edl import EDL, EditPoint, create_edl
 from .editor import AudioEditor
-from .metadata import copy_tags, embed_synced_lyrics
+from .metadata import copy_tags, embed_synced_lyrics, write_edit_log
 from .separator import StemSeparator
 from .transcriber import Transcriber, TranscribedWord
 
@@ -192,6 +192,9 @@ class MusicProfanityFilter:
             copy_tags(input_path, output_path)
             if words and output_path.suffix.lower() == ".mp3":
                 embed_synced_lyrics(output_path, words)
+
+            # Log the edits
+            write_edit_log(input_path, profanities)
 
             print(f"\nDone! Cleaned track saved to: {output_path}")
 
@@ -493,6 +496,9 @@ class MusicProfanityFilter:
             # Copy metadata
             print(f"\nCopying metadata...")
             copy_tags(input_path, output_path)
+
+            # Log the edits
+            write_edit_log(input_path, edits_for_muting)
 
             print(f"\nDone! Cleaned track saved to: {output_path}")
 

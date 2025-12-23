@@ -4,7 +4,8 @@ Metadata handling module.
 Copies ID3 tags from source to destination and embeds synchronized lyrics.
 """
 
-import shutil
+import csv
+from datetime import datetime
 from pathlib import Path
 
 from mutagen.id3 import ID3, SYLT, TIT2, Encoding, ID3NoHeaderError
@@ -160,3 +161,61 @@ def generate_lrc(words: list, output_path: Path | None = None) -> str:
         print(f"Saved LRC lyrics to {output_path}")
 
     return lrc_content
+
+
+def write_edit_log(
+    source_path: Path,
+    profanities: list,
+    log_path: Path | None = None,
+) -> Path:
+    """
+    Write a CSV log of all profanity edits made.
+
+    Args:
+        source_path: Path to the original audio file
+        profanities: List of ProfanityMatch objects
+        log_path: Path for the log file. If None, uses "profanity_edits.log.csv"
+
+    Returns:
+        Path to the log file
+    """
+    source_path = Path(source_path)
+    if log_path is None:
+        log_path = Path("profanity_edits.log.csv")
+
+    # Get artist and title from ID3 tags
+    artist = ""
+    title = ""
+    try:
+        tags = ID3(str(source_path))
+        artist = str(tags.get("TPE1", "")) or ""
+        title = str(tags.get("TIT2", "")) or ""
+    except ID3NoHeaderError:
+        pass
+
+    # Fall back to filename if no tags
+    if not title:
+        title = source_path.stem
+
+    # Check if file exists to determine if we need headers
+    write_header = not log_path.exists()
+
+    with open(log_path, "a", newline="", encoding="utf-8") as f:
+        writer = csv.writer(f)
+        if write_header:
+            writer.writerow(["timestamp", "artist", "title", "start", "end", "word"])
+
+        timestamp = datetime.now().isoformat()
+        for p in profanities:
+            # Format times as M:SS.mm
+            start_min = int(p.start // 60)
+            start_sec = p.start % 60
+            end_min = int(p.end // 60)
+            end_sec = p.end % 60
+            start_str = f"{start_min}:{start_sec:05.2f}"
+            end_str = f"{end_min}:{end_sec:05.2f}"
+
+            writer.writerow([timestamp, artist, title, start_str, end_str, p.original_word])
+
+    print(f"Logged {len(profanities)} edits to {log_path}")
+    return log_path

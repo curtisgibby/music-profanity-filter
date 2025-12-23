@@ -36,3 +36,6 @@ temp/
 # Environment/secrets
 .env
 .env.local
+
+# Edit logs
+profanity_edits.log.csv
