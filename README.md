@@ -85,6 +85,8 @@ music-clean song.mp3 -m medium
 | `--whisper-model`, `-m` | Whisper model size: tiny, base, small, medium, large |
 | `--demucs-model` | Demucs model: htdemucs, htdemucs_ft, mdx_extra |
 | `--detect-only`, `-d` | Only detect profanities, don't create cleaned file |
+| `--generate-edl`, `-e` | Generate EDL file for manual timestamp review |
+| `--apply-edl [FILE]` | Apply edits from EDL file (defaults to `{title}.edl.json`) |
 | `--keep-temp` | Keep intermediate files (stems, edited vocals) |
 
 ### Automatic Lyrics Fetching (Genius)
@@ -146,6 +148,64 @@ Then use it:
 
 ```bash
 music-clean song.mp3 --profanity-list my-words.txt
+```
+
+### EDL Workflow (Manual Timestamp Correction)
+
+Sometimes automated detection gets timestamps slightly wrong—a word is muted too early, too late, or not at all. The EDL (Edit Decision List) workflow lets you manually review and correct timestamps before creating the final clean version.
+
+**Step 1: Generate the EDL file**
+
+```bash
+music-clean song.mp3 --fetch-lyrics --generate-edl
+```
+
+This creates:
+- `song.edl.json` — Edit list with detected profanities and timestamps
+- `song_stems/` — Cached audio stems (vocals + instrumentals) for fast re-processing
+
+**Step 2: Review and edit the EDL file**
+
+Open `song.edl.json` in a text editor:
+
+```json
+{
+  "source_file": "song.mp3",
+  "edits": [
+    {
+      "word": "fuck",
+      "start": 45.123,
+      "end": 45.456,
+      "enabled": true
+    },
+    {
+      "word": "shit",
+      "start": 72.891,
+      "end": 73.234,
+      "enabled": true
+    }
+  ]
+}
+```
+
+You can:
+- **Adjust timestamps** — Change `start` and `end` values (in seconds)
+- **Disable edits** — Set `enabled: false` to skip muting a word
+- **Add new edits** — Manually add entries for words that were missed
+- **Remove edits** — Delete entries entirely
+
+**Step 3: Apply the edited EDL**
+
+```bash
+music-clean song.mp3 --apply-edl
+```
+
+This uses the cached stems from step 1, so it's much faster than a full re-process. The EDL file is automatically found based on the input filename (`song.edl.json`).
+
+If you renamed the EDL file, specify it explicitly:
+
+```bash
+music-clean song.mp3 --apply-edl my-custom-edits.json
 ```
 
 ## How It Works

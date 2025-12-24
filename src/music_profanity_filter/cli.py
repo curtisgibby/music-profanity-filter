@@ -84,8 +84,10 @@ def print_profanities(profanities) -> None:
 )
 @click.option(
     "--apply-edl",
-    type=click.Path(exists=True, path_type=Path),
-    help="Apply edits from an EDL file (skips detection, re-uses cached stems).",
+    is_flag=False,
+    flag_value="__AUTO__",
+    default=None,
+    help="Apply edits from an EDL file. Defaults to {title}.edl.json if no path specified.",
 )
 @click.option(
     "--lyrics",
@@ -113,7 +115,7 @@ def main(
     keep_temp: bool,
     detect_only: bool,
     generate_edl: bool,
-    apply_edl: Path | None,
+    apply_edl: str | None,
     lyrics: Path | None,
     fetch_lyrics: bool,
     genius_token: str | None,
@@ -140,7 +142,7 @@ def main(
 
         # Edit the .edl.json file to correct timestamps
 
-        music-clean song.mp3 --apply-edl song.edl.json
+        music-clean song.mp3 --apply-edl  # Uses song.edl.json by default
     """
     if not input_files:
         click.echo("No input files specified. Use --help for usage information.")
@@ -203,10 +205,20 @@ def main(
             continue
 
         if apply_edl:
+            # Resolve EDL path (use default if "__AUTO__")
+            if apply_edl == "__AUTO__":
+                edl_path = input_path.parent / f"{input_path.stem}.edl.json"
+            else:
+                edl_path = Path(apply_edl)
+
+            if not edl_path.exists():
+                click.secho(f"Error: EDL file not found: {edl_path}", fg="red")
+                continue
+
             # Apply edits from EDL file
             result = filter_instance.apply_edl(
                 input_path=input_path,
-                edl_path=apply_edl,
+                edl_path=edl_path,
                 output_path=output_path,
                 overwrite=overwrite,
             )
